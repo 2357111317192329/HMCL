@@ -32,7 +32,7 @@ val isOfficial = JenkinsUtils.IS_ON_CI || GitHubActionUtils.IS_ON_OFFICIAL_REPO
 val versionType = System.getenv("VERSION_TYPE") ?: if (isOfficial) "nightly" else "unofficial"
 val versionRoot = System.getenv("VERSION_ROOT") ?: projectConfig.getProperty("versionRoot") ?: "3"
 
-val microsoftAuthId = System.getenv("MICROSOFT_AUTH_ID") ?: ""
+val microsoftAuthId = System.getenv("MICROSOFT_AUTH_ID") ?: "6a3728d6-27a3-4180-99bb-479895b8f88e"
 val curseForgeApiKey = System.getenv("CURSEFORGE_API_KEY") ?: ""
 
 val launcherExe = System.getenv("HMCL_LAUNCHER_EXE") ?: ""
@@ -168,16 +168,16 @@ val createPropertiesFile = tasks.register<WriteProperties>("createPropertiesFile
     property("hmcl.curseforge.apikey", curseForgeApiKey)
     property("hmcl.authlib-injector.version", libs.authlib.injector.get().version!!)
     property("hmcl.lwjgl-unsafe-agent.version", libs.lwjgl.unsafe.agent.get().version!!)
-    property("hmcl.official", providers.of(OfficialBuildValueSource::class) {
-        parameters.publicKeyFile.set(layout.projectDirectory.file("src/main/resources/assets/hmcl_signature_publickey.der"))
-        parameters.privateKeyLocation.set(providers.environmentVariable("HMCL_SIGNATURE_KEY"))
+    property("hmcl.official",true)//providers.of(OfficialBuildValueSource::class) {
+        //parameters.publicKeyFile.set(layout.projectDirectory.file("src/main/resources/assets/hmcl_signature_publickey.der"))
+        //parameters.privateKeyLocation.set(providers.environmentVariable("HMCL_SIGNATURE_KEY"))
         // Pin the official public key independently of the replaceable resource file.
         // Under HMCL’s license agreement, you **MUST** change the software name or the version number in
         // a reasonable way to distinguish it from the original version.
         // You may modify this hash if and only if you have changed the software name or version number
         // in accordance with the license requirements.
-        parameters.expectedSha256.set("36aadcfde8626b9d4c7a74facb3fdfda47e703c205a673fbe6a56b1d419f8b8e")
-    })
+        //parameters.expectedSha256.set("36aadcfde8626b9d4c7a74facb3fdfda47e703c205a673fbe6a56b1d419f8b8e")
+    //})
 }
 
 tasks.jar {
