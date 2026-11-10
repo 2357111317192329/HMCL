@@ -18,6 +18,7 @@ import org.jackhuang.hmcl.util.platform.macos.HomebrewUtils;
 import org.jackhuang.hmcl.util.versioning.GameVersionNumber;
 import org.jackhuang.hmcl.util.versioning.VersionNumber;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.Unmodifiable;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -358,13 +359,32 @@ public class DefaultLauncher extends Launcher {
             try {
                 ServerAddress parsed = ServerAddress.parse(address);
                 if (World.supportQuickPlay(GameVersionNumber.asGameVersion(gameVersion))) {
-                    res.add("--quickPlayMultiplayer");
-                    res.add(parsed.port() >= 0 ? address : parsed.host() + ":25565");
+
+                    String quickPlayMultiplayerArg;
+                    if (World.supportQueryArgServerAddress(GameVersionNumber.asGameVersion(gameVersion))) {
+                        // keep original address.
+                        quickPlayMultiplayerArg = parsed.getRawAddress();
+                    } else {
+                        if (parsed.isIncludeParameterContent()) {
+                            LOG.warning("Ignore the query parameters in the server address.");
+                            // Before support for parameter addresses was introduced, the host did not permit the use of the '@' and '?'.
+                            quickPlayMultiplayerArg = parsed.getHostAndPort().toString();
+                        } else {
+                            quickPlayMultiplayerArg = parsed.getRawAddress();
+                        }
+                    }
+
+                    res.add("--quickPlayMultiplayer").add(quickPlayMultiplayerArg.trim());
                 } else {
-                    res.add("--server");
-                    res.add(parsed.host());
-                    res.add("--port");
-                    res.add(parsed.port() >= 0 ? String.valueOf(parsed.port()) : "25565");
+                    String serverArg = parsed.getHostAndPort().host();
+                    String portArg = String.valueOf(parsed.getHostAndPort().port());
+
+                    res.add("--server").add(serverArg.trim());
+                    res.add("--port").add(portArg.trim());
+
+                    if (parsed.isIncludeParameterContent()) {
+                        LOG.warning("Ignore the query parameters in the server address.");
+                    }
                 }
             } catch (IllegalArgumentException e) {
                 LOG.warning("Invalid server address: " + address, e);
@@ -408,11 +428,17 @@ public class DefaultLauncher extends Launcher {
         return new Command(res, tempNativeFolder, javaNativeFolder, encoding);
     }
 
-    public Map<String, Boolean> getFeatures() {
-        return Collections.singletonMap(
-                "has_custom_resolution",
-                options.getHeight() != null && options.getHeight() != 0 && options.getWidth() != null && options.getWidth() != 0
-        );
+    /// Returns the feature flags used to evaluate conditional game arguments.
+    /// The `has_custom_resolution` flag is enabled when both dimensions are non-null and nonzero
+    /// and the game version is at least `1.6` (snapshot `13w25a`).
+    ///
+    /// @return an unmodifiable snapshot containing the custom resolution flag
+    public @Unmodifiable Map<String, Boolean> getFeatures() {
+        boolean hasCustomResolution = options.getHeight() != null && options.getHeight() != 0
+                && options.getWidth() != null && options.getWidth() != 0
+                && instance.getVersion().isAtLeast("1.6", "13w25a");
+
+        return Collections.singletonMap("has_custom_resolution", hasCustomResolution);
     }
 
     private final Map<String, Supplier<Boolean>> forbiddens = mapOf(
@@ -766,17 +792,22 @@ public class DefaultLauncher extends Launcher {
         }
 
         if (options.getRenderer() == Renderer.DEFAULT) {
-            List<GraphicsCard> graphicsCards = SystemInfo.getGraphicsCards();
-            if (graphicsCards != null && graphicsCards.size() == 2) {
+            @Unmodifiable List<GraphicsCard> graphicsCards = SystemInfo.getGraphicsCards().stream()
+                    .filter(it -> it.getType() != GraphicsCard.Type.DISPLAY_ONLY)
+                    .toList();
+            if (graphicsCards.size() == 2) {
                 GraphicsCard card0 = graphicsCards.get(0);
                 GraphicsCard card1 = graphicsCards.get(1);
 
-                if (card0.getType() != null && card1.getType() != null
-                        && card0.getType() != card1.getType()) {
-                    GraphicsCard discreteGraphicsCard = card0.getType() == GraphicsCard.Type.Discrete ? card0 : card1;
+                boolean hasIntegrated = card0.getType() == GraphicsCard.Type.INTEGRATED || card1.getType() == GraphicsCard.Type.INTEGRATED;
+                boolean hasDiscrete = card0.getType() == GraphicsCard.Type.DISCRETE || card1.getType() == GraphicsCard.Type.DISCRETE;
+
+                if (hasIntegrated && hasDiscrete) {
+                    GraphicsCard discreteGraphicsCard = card0.getType() == GraphicsCard.Type.DISCRETE ? card0 : card1;
 
                     if (OperatingSystem.CURRENT_OS == OperatingSystem.LINUX) {
-                        if (HardwareVendor.NVIDIA.equals(discreteGraphicsCard.getVendor())) {
+                        if (HardwareVendor.NVIDIA.equals(discreteGraphicsCard.getVendor())
+                                && "nvidia".equals(discreteGraphicsCard.getDriver())) {
                             // https://askubuntu.com/a/1350825
                             env.put("__NV_PRIME_RENDER_OFFLOAD", "1");
                             env.put("__GLX_VENDOR_LIBRARY_NAME", "nvidia");
