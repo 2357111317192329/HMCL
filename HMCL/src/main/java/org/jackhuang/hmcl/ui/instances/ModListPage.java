@@ -44,6 +44,7 @@ import org.jackhuang.hmcl.addon.update.AddonCheckUpdatesTask;
 import org.jackhuang.hmcl.game.GameInstanceID;
 import org.jackhuang.hmcl.game.HMCLGameInstance;
 import org.jackhuang.hmcl.game.HMCLGameRepository;
+import org.jackhuang.hmcl.image.ImageLoaders;
 import org.jackhuang.hmcl.setting.DownloadProviders;
 import org.jackhuang.hmcl.setting.GameDirectory;
 import org.jackhuang.hmcl.setting.GameInstanceIconType;
@@ -59,7 +60,6 @@ import org.jackhuang.hmcl.util.Pair;
 import org.jackhuang.hmcl.util.StringUtils;
 import org.jackhuang.hmcl.util.TaskCancellationAction;
 import org.jackhuang.hmcl.util.i18n.I18n;
-import org.jackhuang.hmcl.util.io.CompressingUtils;
 import org.jackhuang.hmcl.util.io.FileUtils;
 import org.jackhuang.hmcl.util.io.NetworkUtils;
 import org.jackhuang.hmcl.util.javafx.ItemPropertyAsyncCache;
@@ -70,8 +70,6 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.ref.WeakReference;
-import java.nio.file.FileSystem;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CancellationException;
@@ -603,29 +601,10 @@ public final class ModListPage extends ListPageBase<ModListPage.ModInfoObject> i
             return GameInstanceIconType.getIconType(this.localModFile.getModLoaderType()).getIcon();
         }
 
+        /// Loads the icon, using the default icon if it is absent or invalid.
         private Image loadIcon() {
-            List<String> iconPaths = new ArrayList<>();
-
-            if (StringUtils.isNotBlank(this.localModFile.getLogoPath())) {
-                iconPaths.add(this.localModFile.getLogoPath());
-            }
-
-            try (FileSystem fs = CompressingUtils.createReadOnlyZipFileSystem(this.localModFile.getFile())) {
-                for (String path : iconPaths) {
-                    Path iconPath = fs.getPath(path);
-                    if (Files.exists(iconPath)) {
-                        Image image = FXUtils.loadImage(iconPath, 80, 80, true, true);
-                        if (!image.isError() && image.getWidth() > 0 && image.getHeight() > 0 &&
-                                Math.abs(image.getWidth() - image.getHeight()) < 1) {
-                            return image;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                LOG.warning("Failed to load mod icons", e);
-            }
-
-            return getDefaultIcon();
+            Image icon = localModFile.loadIcon(ImageLoaders.DEFAULT);
+            return FXUtils.isValidIcon(icon) ? icon : getDefaultIcon();
         }
     }
 
@@ -681,7 +660,7 @@ public final class ModListPage extends ListPageBase<ModListPage.ModInfoObject> i
             FXUtils.copyOnDoubleClick(description);
 
             ScrollPane descriptionPane = new ScrollPane(description);
-            FXUtils.smoothScrolling(descriptionPane);
+            ScrollUtils.installSmoothScrolling(descriptionPane);
             descriptionPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
             descriptionPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
             descriptionPane.setFitToWidth(true);
