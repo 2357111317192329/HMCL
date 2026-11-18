@@ -91,7 +91,7 @@ public final class IntegrityChecker {
         }
     }
 
-    private static volatile @Nullable Boolean selfVerified = null;
+    private static volatile @Nullable Boolean selfVerified = true;
 
     public static @Nullable Boolean getSelfVerified() {
         return selfVerified;
